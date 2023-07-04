@@ -16,11 +16,11 @@ def prep_log_msg(msg, prefix=''):
     if type(msg) == bytes:
         try:
             msg = msg.decode('utf-8')
-        except UnicodeDecodeError:
-            pass
+        except Exception as e:
+            msg = f'{msg}'
 
-    msg = datetime.datetime.now().time().isoformat() + ' ' + prefix + msg
-    return msg
+    log_msg = datetime.datetime.now().time().isoformat() + ' ' + prefix + msg
+    return log_msg
 
 def calc_padding_len(msg):
     """
@@ -63,12 +63,12 @@ def create_msg_body(subject, msg, receiver, sender, msg_type, num_msgs=160):
 
     # message headers + body
     msg_body = f"""\
-                    Subject: {subject}
-                    To: {receiver}
-                    From: {sender}
+Subject: Blind Protocol Test3
+To: {receiver}
+From: {sender}
 
-                    {msg}
-                """
+Hi there, this is a test email sent using Blind Protocol.
+"""
     
     # pad the message body to fit the TLS record size limit
     msg_body += ' ' * calc_padding_len(msg_body)
@@ -119,7 +119,7 @@ def parse_tls_packets(tlspackets):
         
         # size of the packet is 2 bytes after the start
         size = int(tlspackets_hex[start_idx+len(START):start_idx+len(START)+4], 16)
-        print(f'size: {size}')
+        # print(f'size: {size}')
         # the packet is the size of the packet + 5 bytes
         if start_idx+len(START)+4+size*2 > len(tlspackets_hex):
             break

@@ -10,7 +10,6 @@ import utils
 # third party imports
 from tlslite import SMTP_TLS as Client, HandshakeSettings
 
-
 class MAILClient(Client):
     def __init__(self, hostname, port, email, password, is_registered, settings=HandshakeSettings()): 
         super().__init__(hostname,port)
@@ -18,10 +17,19 @@ class MAILClient(Client):
         self.starttls(settings=settings)
         self.ehlo()
 
-        # self.debuglevel = 3
+        # self.debuglevel = 1
         self.authenticated = False
         self.user = self.sign_user(email, password, is_registered)
         self.inbox = ''
+
+    def sign_user(self, email, password, is_registered):
+        while(not self.authenticated):
+            if is_registered:
+                if self.login(email,password):
+                    self.authenticated = True
+                    return True
+                else:
+                    raise 'Invalid Credentials'
 
 
 if __name__ == '__main__':
@@ -41,36 +49,51 @@ if __name__ == '__main__':
     email_body = inputs['email-body']
     verifier = inputs['verifier']
 
-    try:
-        client = MAILClient(verifier['ip'], verifier['port'], \
-                            sender['email'], sender['pwd'], \
-                                is_registered=True)
-        logging.debug(utils.prep_log_msg(f'Connected to {verifier["ip"]}:{verifier["port"]}'))
-        
-    except Exception as e:
-        logging.critical(utils.prep_log_msg(e.__str__())) # most likely missing inputs
-        exit(1)
-    
-
     if email_body['type'] in constants.MSG_TYPES:
         # create mail body
         msg = utils.create_msg_body(email_body['subject'], \
                                     email_body['msg'], \
-                                    receiver, sender, \
+                                    receiver['email'], sender['email'], \
                                     email_body['type'], \
                                     num_msgs=email_body['num-msgs'])
         
     else:
         logging.critical(utils.prep_log_msg('Invalid message type'))
         exit(1)
+    
+    # send mail
+    def standard_email():
+        print("Sending email...")
+        import smtplib
+        s = smtplib.SMTP(sender['host'], 587)
+        s.debuglevel = 3
+        s.ehlo()
+        s.starttls()
+        s.login(sender['email'], sender['pwd'])
+        s.sendmail(sender['email'], receiver['email'], msg)
+        s.quit()
 
-    try:
-        client.sendmail(sender['address'], receiver['address'], msg)
-        logging.info(utils.prep_log_msg('Message sent successfully!'))
+    def youchoose_email():
+        try:
+            client = MAILClient(verifier['ip'], verifier['port'], \
+                                sender['email'], sender['pwd'], \
+                                    is_registered=True)
+            logging.debug(utils.prep_log_msg(f'Connected to {verifier["ip"]}:{verifier["port"]}'))
+        
+        except Exception as e:
+            logging.critical(utils.prep_log_msg(e.__str__())) # most likely missing inputs
+            exit(1)
 
-    except Exception as e:
-        logging.critical(utils.prep_log_msg(e.__str__()))
-        exit(1)
+        try:
+            client.sendmail(sender['email'], receiver['email'], msg)
+            logging.info(utils.prep_log_msg('Message sent successfully!'))
+
+        except Exception as e:
+            logging.critical(utils.prep_log_msg(e.__str__()))
+            exit(1)
+
+    youchoose_email()
+    # standard_email()
 
 
 

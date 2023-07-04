@@ -15,6 +15,14 @@ import io
 import time
 import socket
 
+# custom imports
+import logging
+import utils
+import constants
+log = logging.getLogger(__name__)
+
+
+
 from .utils.compat import *
 from .utils.cryptomath import *
 from .utils.codec import Parser, BadCertificateError
@@ -931,21 +939,27 @@ class TLSRecordLayer(object):
             self._handshake_hash.update(buf)
 
         #Fragment big messages
+
         ## custom code
         original_buf = buf
         if len(original_buf) > self.recordSize:
-            self._recordLayer.drop_mode = True
             try:
-                print(f'tlsrecordlayer.py; _sendMsg; len: {len(original_buf)} and recordSize: {self.recordSize}')
-                # import sys; import traceback; traceback.print_stack(file=sys.stdout)
-                if b'Subject' in original_buf:
-                    print("Subject BEGIN in buf")
-                    px_hdr = "Y12345Y DROP: BEGIN DROPPING X12345X".encode()
-                    print(self.sock.socket.send(px_hdr))
+                if constants.bSUBJECT in original_buf:
+                    log.debug(utils.prep_log_msg("Subject keyword found; Size of full message: %s" % len(original_buf)))
+                    log.debug(utils.prep_log_msg("Subject keyword found; Size of record: %s" % self.recordSize))
+                              
+                    self._recordLayer.drop_mode = True
+                    log.debug(utils.prep_log_msg("Drop mode set to True"))
+
+                    px_hdr = constants.bDROP_MSG_BEGIN
+                    self.sock.socket.send(px_hdr)
+                    log.debug(utils.prep_log_msg("DROP: BEGIN DROPPING hdr sent"))
 
             except Exception as e:
-                print(f'tlsrecordlayer.py; _sendMsg; Exception: {e}')
+                log.critical(utils.prep_log_msg(f'tlsrecordlayer.py; _sendMsg; Exception: {e}'))
+                
         ## end custom code
+
         while len(buf) > self.recordSize:
             newB = buf[:self.recordSize]
             buf = buf[self.recordSize:]
@@ -955,18 +969,22 @@ class TLSRecordLayer(object):
                 yield result
 
         ## custom code last fragment
-        if b'Subject' in original_buf:
-            print("Subject END in buf")
-            px_hdr = "Y12345Y DROP: END DROPPING X12345X".encode()
-            self.sock.flush()
-            print(self.sock.socket.send(px_hdr))
+        if constants.bSUBJECT in original_buf:
+            self._recordLayer.drop_mode = False
+            log.debug(utils.prep_log_msg("Drop mode set to True"))
+
+            px_hdr = constants.bDROP_MSG_END
+            self.sock.socket.send(px_hdr)
+            log.debug(utils.prep_log_msg("DROP: END DROPPING hdr sent"))
+            
         ## end custom code
+
         msgFragment = Message(contentType, buf)
         for result in self._sendMsgThroughSocket(msgFragment):
             yield result
+
         # custom code
-        print(f'Normal operations from now')
-        self._recordLayer.drop_mode = False
+        # print(f'Normal operations from now')
         ## end custom code
         
 

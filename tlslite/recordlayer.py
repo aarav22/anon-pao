@@ -18,6 +18,13 @@ try:
 except NameError:
     xrange = range
 
+# custom imports
+import logging
+import utils
+import constants
+log = logging.getLogger(__name__)
+
+
 from .utils import tlshashlib as hashlib
 from .constants import ContentType, CipherSuite
 from .messages import RecordHeader3, RecordHeader2, Message
@@ -718,19 +725,22 @@ class RecordLayer(object):
        
 
        ## custom code: only for TLS 1.3
-        print("buf before seal: ", len(buf))
-        if self.drop_mode:
-            print("Dropping Packet Mode ON")
+        if self.drop_mode:            
             if self.first_drop:
                 seqNumBytes = self._writeState.getSeqNumBytes()
                 self.first_drop = False
+
             else:
                 writer = Writer()
                 writer.add(self._writeState.seqnum, 8)
                 seqNumBytes = writer.bytes
                 self.first_drop = True
+
+            log.debug(utils.prep_log_msg(f"seqNumBytes: {seqNumBytes}"))
+
         else:
             seqNumBytes = self._writeState.getSeqNumBytes()
+
         ## end of custom code
 
         if not self._is_tls13_plus():
@@ -752,8 +762,6 @@ class RecordLayer(object):
         assert len(nonce) == self._writeState.encContext.nonceLength
 
         buf = self._writeState.encContext.seal(nonce, buf, authData)
-
-        print("buf after seal: ", len(buf))
 
         #AES-GCM, has an explicit variable nonce.
         if "aes" in self._writeState.encContext.name and \
@@ -805,6 +813,7 @@ class RecordLayer(object):
         if self._is_tls13_plus() and self._writeState.encContext and \
                 contentType != ContentType.change_cipher_spec:
             data += bytearray([contentType])
+
             if self.padding_cb:
                 max_padding = self.send_record_limit - len(data) - 1
                 # add number of zero bytes specified by padding_cb()
@@ -817,20 +826,24 @@ class RecordLayer(object):
         padding = 0
         if self.version in ((0, 2), (2, 0)):
             data, padding = self._ssl2Encrypt(data)
+
         elif self.version > (3, 3) and \
                 contentType == ContentType.change_cipher_spec:
             # TLS 1.3 does not encrypt CCS messages
             pass
+
         elif self._writeState.encContext and \
                 self._writeState.encContext.isAEAD:
-            print("AEAD encryption")
             data = self._encryptThenSeal(data, contentType)
+
         elif self._writeState.encryptThenMAC:
             data = self._encryptThenMAC(data, contentType)
+
         else:
             data = self._macThenEncrypt(data, contentType)
 
         encryptedMessage = Message(contentType, data)
+
         for result in self._recordSocket.send(encryptedMessage, padding):
             yield result
 
