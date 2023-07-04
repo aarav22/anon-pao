@@ -63,11 +63,11 @@ def create_msg_body(subject, msg, receiver, sender, msg_type, num_msgs=160):
 
     # message headers + body
     msg_body = f"""\
-Subject: Blind Protocol Test3
+Subject: {subject}
 To: {receiver}
 From: {sender}
 
-Hi there, this is a test email sent using Blind Protocol.
+{msg}
 """
     
     # pad the message body to fit the TLS record size limit
