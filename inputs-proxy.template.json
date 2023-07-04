@@ -1,0 +1,12 @@
+{
+    "verifier": {
+        "ip": "localhost",
+        "port": 6944
+    },
+    "prover": {
+        "email_server": {
+            "host": "smtp-mail.outlook.com",
+            "port": 587
+        }
+    }
+}

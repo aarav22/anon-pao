@@ -1,0 +1,20 @@
+{
+    "email-body":{
+        "subject": "Login Verification Code",
+        "msg": "Your login verification code is: ",
+        "type": "secret",
+        "num-msgs": 160
+    },
+    "sender": {
+        "email": "<email>",
+        "host": "smtp-mail.outlook.com",
+        "pwd": "<password>"
+    },
+    "receiver": {
+        "email": "<email>"
+    },
+    "verifier": {
+        "ip": "localhost",
+        "port": 6944
+    }
+}
