@@ -13,7 +13,7 @@ YouChoose allows the prover to prove ownership of their email address without re
 
 
 ## Usage
-
+* To see how tlslite works see [tlslite documentation](./tlslite-notes.md)
 
 ## Bibliography
 [1] Blind Certificate Authorities: https://eprint.iacr.org/2018/1022
