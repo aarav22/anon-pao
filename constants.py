@@ -3,6 +3,8 @@ MSG_TYPES = ['numeric',
                     'secret'
                   ]
 
+ENTITIES = ['Client', 'Email Server', 'Verifier']
+
 TLS_RECORD_SIZE_LIMIT = 16384 # 2^14
 bCRLF = b"\r\n"
 CRLF = "\r\n"
