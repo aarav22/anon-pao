@@ -167,9 +167,11 @@ class SocketListener(Thread):
                 # enter drop begin mode
                 elif self.drop_mode == constants.DROP_MODES[0]: 
                     msg = msg.replace(constants.bDROP_MSG_BEGIN, b'')
+                    someFlag = True
 
                     # client is sending challenges
-                    while msg:
+                    while msg or someFlag:
+                        someFlag = False
                         self.drop_mode = get_drop_mode(msg)
                         c_stream += msg                            
 
@@ -177,29 +179,46 @@ class SocketListener(Thread):
                             break
 
                         msg = self.rcv_msg(self.c_socket, constants.ENTITIES[0])
+                        print(msg)
 
                     if self.drop_mode != constants.DROP_MODES[1]:
                         logging.critical(utils.prep_log_msg('Drop end mode not found'))
-                        exit(1)
+                        # exit(1)
                 
                 # enter drop end mode
                 if self.drop_mode == constants.DROP_MODES[1]:
                     # remove drop end identifier from stream  
                     c_stream = c_stream.replace(constants.bDROP_MSG_END, b'')
 
+                    logging.debug(utils.prep_log_msg(f'Pre challenge Client stream: {c_stream}'))
                     # extract challenges from stream
                     challenges, leftover = utils.parse_tls_packets(c_stream)
                     logging.debug(utils.prep_log_msg(f'Challenges: {challenges}'))
 
                     # recreate stream with selected challenges
-                    c_stream = b""
-                    for (i, challenge) in enumerate(challenges):
-                        if i % 2 != 0: # skip every other challenge
-                            continue
+                    c_stream = b"" # reset stream
+                    c_stream = challenges[0] # add first challenge - which is a header
+
+                    for i in range(1, 21):
+                        if i % 2 == 0:
+                            c_stream += challenges[i]
                         else:
-                            c_stream += challenge
+                            continue
+                    
+                    c_stream += challenges[21] # add last challenge - which is a footer
+
+                    # for (i, challenge) in enumerate(challenges):
+                        # if i < len(challenges) - 1:
+                        #     if i % 2 != 0: # skip every other challenge
+                        #         continue
+                        #     else:
+                        #         c_stream += challenge
+                        # else:
+                                # c_stream += challenge
                     
                     c_stream += leftover
+                    #   log stream
+                    logging.debug(utils.prep_log_msg(f'Client stream: {c_stream}'))
                     self.drop_mode = constants.DROP_MODES[2] # reset drop mode
                     
                 # send stream to server

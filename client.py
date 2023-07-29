@@ -1,6 +1,7 @@
 # standard imports
 import json
 import logging
+import time
 logging.basicConfig(filename='client-logs.log', encoding='utf-8', level=logging.DEBUG)
 
 # local imports
@@ -33,6 +34,8 @@ class MAILClient(Client):
 
 
 if __name__ == '__main__':
+    timer = time.time()
+
     config = None
 
     logging.info(utils.prep_log_msg('Starting client...'))
@@ -48,7 +51,7 @@ if __name__ == '__main__':
     receiver = inputs['receiver']
     email_body = inputs['email-body']
     verifier = inputs['verifier']
-
+# 
     if email_body['type'] in constants.MSG_TYPES:
         # create mail body
         msg = utils.create_msg_body(email_body['subject'], \
@@ -60,6 +63,8 @@ if __name__ == '__main__':
     else:
         logging.critical(utils.prep_log_msg('Invalid message type'))
         exit(1)
+
+    # print(msg)
     
     # send mail
     def standard_email():
@@ -78,22 +83,24 @@ if __name__ == '__main__':
             client = MAILClient(verifier['ip'], verifier['port'], \
                                 sender['email'], sender['pwd'], \
                                     is_registered=True)
-            logging.debug(utils.prep_log_msg(f'Connected to {verifier["ip"]}:{verifier["port"]}'))
+            # logging.debug(utils.prep_log_msg(f'Connected to {verifier["ip"]}:{verifier["port"]}'))
         
         except Exception as e:
-            logging.critical(utils.prep_log_msg(e.__str__())) # most likely missing inputs
+            # logging.critical(utils.prep_log_msg(e.__str__())) # most likely missing inputs
             exit(1)
 
         try:
             client.sendmail(sender['email'], receiver['email'], msg)
-            logging.info(utils.prep_log_msg('Message sent successfully!'))
+            # logging.info(utils.prep_log_msg('Message sent successfully!'))
 
         except Exception as e:
-            logging.critical(utils.prep_log_msg(e.__str__()))
+            # logging.critical(utils.prep_log_msg(e.__str__()))
             exit(1)
 
     youchoose_email()
     # standard_email()
+
+    print(f'Client took {time.time() - timer} seconds to run')
 
 
 

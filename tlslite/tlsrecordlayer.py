@@ -942,36 +942,72 @@ class TLSRecordLayer(object):
 
         ## custom code
         original_buf = buf
-        if len(original_buf) > self.recordSize:
-            try:
-                if constants.bSUBJECT in original_buf:
-                    log.debug(utils.prep_log_msg("Subject keyword found; Size of full message: %s" % len(original_buf)))
-                    log.debug(utils.prep_log_msg("Subject keyword found; Size of record: %s" % self.recordSize))
-                              
-                    self._recordLayer.drop_mode = True
-                    log.debug(utils.prep_log_msg("Drop mode set to True"))
+        someFlag = False
+        # if len(original_buf) > self.recordSize:
+        try:
+            if constants.bSUBJECT in original_buf:
+                log.debug(utils.prep_log_msg("Subject keyword found; Size of full message: %s" % len(original_buf)))
+                log.debug(utils.prep_log_msg("Subject keyword found; Size of record: %s" % self.recordSize))
+                            
+                self._recordLayer.drop_mode = True
+                log.debug(utils.prep_log_msg("Drop mode set to True"))
 
-                    px_hdr = constants.bDROP_MSG_BEGIN
-                    self.sock.socket.send(px_hdr)
-                    log.debug(utils.prep_log_msg("DROP: BEGIN DROPPING hdr sent"))
+                px_hdr = constants.bDROP_MSG_BEGIN
+                self.sock.socket.send(px_hdr)
+                log.debug(utils.prep_log_msg("DROP: BEGIN DROPPING hdr sent"))
 
-            except Exception as e:
-                log.critical(utils.prep_log_msg(f'tlsrecordlayer.py; _sendMsg; Exception: {e}'))
+        except Exception as e:
+            log.critical(utils.prep_log_msg(f'tlsrecordlayer.py; _sendMsg; Exception: {e}'))
                 
-        ## end custom code
+        if self._recordLayer.drop_mode == True:
+            # log.debug(utils.prep_log_msg("Fragmenting messages in drop mode"))
+            # log.debug(utils.prep_log_msg("Size of full message: %s" % len(original_buf)))
+            # log.debug(utils.prep_log_msg("Message: %s" % original_buf))
+            msg_hdr = original_buf[:131]
+            challenges = original_buf[131:151]
+            remaining_msg = original_buf[151:]
 
-        while len(buf) > self.recordSize:
-            newB = buf[:self.recordSize]
-            buf = buf[self.recordSize:]
+            # log.debug(utils.prep_log_msg("Size of msg_hdr: %s" % len(msg_hdr)))
+            # log.debug(utils.prep_log_msg("Size of challenges: %s" % len(challenges)))
+            # print(f'challenges: {challenges}')
+            # log.debug(utils.prep_log_msg("Size of remaining_msg: %s" % len(remaining_msg)))
+            
+            hdrFragment = Message(contentType, msg_hdr)
+            challengesFragment = []
+            print(challenges)
+            for i in range(0, len(challenges)):
+                challengesFragment.append(Message(contentType, b'1' if challenges[i] == 49 else b'0'))
+            remainingFragment = Message(contentType, remaining_msg)
 
-            msgFragment = Message(contentType, newB)
-            for result in self._sendMsgThroughSocket(msgFragment):
+            # print(f'challengesFragment: {challengesFragment}')
+            for result in self._sendMsgThroughSocket(hdrFragment):
                 yield result
+            for challenge in challengesFragment:
+                for result in self._sendMsgThroughSocket(challenge):
+                    yield result
+            # print("original_buf: ", original_buf)
+            # msg = Message(contentType, original_buf)
+            for result in self._sendMsgThroughSocket(remainingFragment):
+                yield result
+
+            buf = b''
+            someFlag = True
+
+        # end custom code
+
+        else:
+            while len(buf) > self.recordSize:
+                newB = buf[:self.recordSize]
+                buf = buf[self.recordSize:]
+
+                msgFragment = Message(contentType, newB)
+                for result in self._sendMsgThroughSocket(msgFragment):
+                    yield result
 
         ## custom code last fragment
         if constants.bSUBJECT in original_buf:
             self._recordLayer.drop_mode = False
-            log.debug(utils.prep_log_msg("Drop mode set to True"))
+            log.debug(utils.prep_log_msg("Drop mode set to False"))
 
             px_hdr = constants.bDROP_MSG_END
             self.sock.socket.send(px_hdr)
@@ -979,9 +1015,10 @@ class TLSRecordLayer(object):
             
         ## end custom code
 
-        msgFragment = Message(contentType, buf)
-        for result in self._sendMsgThroughSocket(msgFragment):
-            yield result
+        if not someFlag: # custom if statement
+            msgFragment = Message(contentType, buf)
+            for result in self._sendMsgThroughSocket(msgFragment):
+                yield result
 
         # custom code
         # print(f'Normal operations from now')

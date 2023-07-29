@@ -22,6 +22,7 @@ except NameError:
 import logging
 import utils
 import constants
+import otc
 log = logging.getLogger(__name__)
 
 
@@ -108,7 +109,7 @@ class RecordSocket(object):
                                             len(data))
 
         data = header.write() + data
-        print(f'Length of encrypted message {len(data)}')
+        # print(f'Length of encrypted message {len(data)}')
 
         for result in self._sockSendAll(data):
             yield result
@@ -736,7 +737,8 @@ class RecordLayer(object):
                 seqNumBytes = writer.bytes
                 self.first_drop = True
 
-            log.debug(utils.prep_log_msg(f"seqNumBytes: {seqNumBytes}"))
+            # print(buf)
+            # log.debug(utils.prep_log_msg(f"seqNumBytes: {seqNumBytes}"))
 
         else:
             seqNumBytes = self._writeState.getSeqNumBytes()
@@ -758,6 +760,7 @@ class RecordLayer(object):
                                   out_len // 256, out_len % 256])
 
         nonce = self._getNonce(self._writeState, seqNumBytes)
+        # log.debug(utils.prep_log_msg(f"nonce: {nonce}"))
 
         assert len(nonce) == self._writeState.encContext.nonceLength
 

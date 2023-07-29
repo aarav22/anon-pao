@@ -71,7 +71,8 @@ From: {sender}
 """
     
     # pad the message body to fit the TLS record size limit
-    msg_body += ' ' * calc_padding_len(msg_body)
+    # msg_body += ' ' * calc_padding_len(msg_body)
+    print(f'Pre len(msg_body): {len(msg_body)}')
 
     if msg_type in constants.MSG_TYPES:
         if msg_type == constants.MSG_TYPES[0]: # numeric
@@ -87,12 +88,12 @@ From: {sender}
                                       for j in range(0, constants.TLS_RECORD_SIZE_LIMIT)])
                 
         elif msg_type == constants.MSG_TYPES[2]: # secret
-            for i in range(1, num_msgs): 
-                new_msg = f""" 
-                New Secret: {i}
-                """
-                msg_body += new_msg + ' ' * calc_padding_len(new_msg)
-
+            for i in range(1, num_msgs+1): 
+                new_msg = f"""{i%2}"""
+                msg_body += new_msg 
+                # print(f'Post {i} len(msg_body): {len(msg_body)}')
+                # + ' ' * calc_padding_len(new_msg)
+    print(f'Post len(msg_body): {len(msg_body)}')
     return msg_body
 
 
