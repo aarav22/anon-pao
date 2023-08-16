@@ -27,10 +27,8 @@ class Python_AES(AES):
         # pylint: disable=invalid-name
         key, IV = bytearray(key), bytearray(IV)
         super(Python_AES, self).__init__(key, mode, IV, "python")
-        # print(f'python_aes.py -- INIT; key:{key} ----- mode: {mode} ---- IV: {IV}')
         self.rijndael = Rijndael(key, 16)
         self.IV = IV
-        self.key = key
 
     def encrypt(self, plaintext):
         super(Python_AES, self).encrypt(plaintext)

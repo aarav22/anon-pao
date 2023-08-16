@@ -178,6 +178,8 @@ class TLSRecordLayer(object):
 
         # NewSessionTickets received from server
         self.tickets = []
+        # TLS 1.2 and earlier tickets received from server
+        self.tls_1_0_tickets = []
 
         # Indicator for heartbeat extension mode, if we can receive
         # heartbeat requests
@@ -442,8 +444,8 @@ class TLSRecordLayer(object):
         try:
             if self.closed:
                 raise TLSClosedConnectionError("attempt to write to closed connection")
+
             applicationData = ApplicationData().create(bytearray(s))
-            # print(f'{os.path.basename(__file__)}; {s} and applicationData is {applicationData.bytes}')
             for result in self._sendMsg(applicationData, \
                                         randomizeFirstBlock=True):
                 yield result
@@ -939,8 +941,7 @@ class TLSRecordLayer(object):
             self._handshake_hash.update(buf)
 
         #Fragment big messages
-
-        ## custom code
+       ## custom code
         original_buf = buf
         someFlag = False
         # if len(original_buf) > self.recordSize:
@@ -963,9 +964,9 @@ class TLSRecordLayer(object):
             # log.debug(utils.prep_log_msg("Fragmenting messages in drop mode"))
             # log.debug(utils.prep_log_msg("Size of full message: %s" % len(original_buf)))
             # log.debug(utils.prep_log_msg("Message: %s" % original_buf))
-            msg_hdr = original_buf[:131]
-            challenges = original_buf[131:151]
-            remaining_msg = original_buf[151:]
+            msg_hdr = original_buf[:113]
+            challenges = original_buf[113:273]
+            remaining_msg = original_buf[273:]
 
             # log.debug(utils.prep_log_msg("Size of msg_hdr: %s" % len(msg_hdr)))
             # log.debug(utils.prep_log_msg("Size of challenges: %s" % len(challenges)))
@@ -1024,6 +1025,14 @@ class TLSRecordLayer(object):
         # print(f'Normal operations from now')
         ## end custom code
         
+
+        #     msgFragment = Message(contentType, newB)
+        #     for result in self._sendMsgThroughSocket(msgFragment):
+        #         yield result
+
+        # msgFragment = Message(contentType, buf)
+        # for result in self._sendMsgThroughSocket(msgFragment):
+        #     yield result
 
     def _queue_message(self, msg):
         """Just queue message for sending, for record layer coalescing."""
@@ -1120,6 +1129,17 @@ class TLSRecordLayer(object):
                             yield result
                     # ignore the message
                     continue
+
+                # TLS 1.3 Handshake messages MUST NOT be interleaved with
+                # other messages, Section 5.1 RFC 8446
+                if self.version > (3, 3) and \
+                        recordHeader.type != ContentType.handshake and \
+                        self._defragmenter.buffers[ContentType.handshake]:
+                    for result in self._sendError(
+                            AlertDescription.unexpected_message,
+                            "Interleaved Handshake and "
+                            "non-handshake messages"):
+                        yield result
 
                 #If we received an unexpected record type...
                 if recordHeader.type not in expectedType:
@@ -1270,6 +1290,20 @@ class TLSRecordLayer(object):
                                                       .format(exp, rec)):
                             yield result
 
+                # in TLS 1.3 some Handshake messages MUST NOT span key changes
+                if self.version > (3, 3) and \
+                        subType in (HandshakeType.client_hello,
+                                    HandshakeType.end_of_early_data,
+                                    HandshakeType.server_hello,
+                                    HandshakeType.finished,
+                                    HandshakeType.key_update) and \
+                        not self._defragmenter.is_empty():
+                    for result in self._sendError(
+                            AlertDescription.unexpected_message,
+                            "CH, EOED, SH, Finished, or KU not aligned with "
+                            "record boundary"):
+                        yield result
+
                 #Update handshake hashes
                 self._handshake_hash.update(p.bytes)
 
@@ -1299,7 +1333,10 @@ class TLSRecordLayer(object):
                 elif subType == HandshakeType.encrypted_extensions:
                     yield EncryptedExtensions().parse(p)
                 elif subType == HandshakeType.new_session_ticket:
-                    yield NewSessionTicket().parse(p)
+                    if self.version < (3, 4):
+                        yield NewSessionTicket1_0().parse(p)
+                    else:
+                        yield NewSessionTicket().parse(p)
                 elif subType == HandshakeType.key_update:
                     yield KeyUpdate().parse(p)
                 else:

@@ -64,7 +64,7 @@ class RecordSocket(object):
         self.tls13record = False
         self.recv_record_limit = 2**14
 
-    def _sockSendAll(self, data, dataBytes = False):
+    def _sockSendAll(self, data):
         """
         Send all data through socket
 
@@ -74,8 +74,6 @@ class RecordSocket(object):
         """
         while 1:
             try:
-                if dataBytes:
-                    print("dataBytes")
                 bytesSent = self.sock.send(data)
             except socket.error as why:
                 if why.args[0] in (errno.EWOULDBLOCK, errno.EAGAIN):
@@ -109,7 +107,6 @@ class RecordSocket(object):
                                             len(data))
 
         data = header.write() + data
-        # print(f'Length of encrypted message {len(data)}')
 
         for result in self._sockSendAll(data):
             yield result
@@ -376,6 +373,13 @@ class RecordLayer(object):
         self._pendingWriteState.encryptThenMAC = value
         self._pendingReadState.encryptThenMAC = value
 
+    def _get_pending_state_etm(self):
+        """
+        Return the state of encrypt then MAC for the connection after
+        CCS will be exchanged
+        """
+        return self._pendingWriteState.encryptThenMAC
+
     @property
     def blockSize(self):
         """Return the size of block used by current symmetric cipher (R/O)"""
@@ -469,220 +473,42 @@ class RecordLayer(object):
         data += paddingBytes
         return data
 
-    def calculateMAC(self, mac, seqnumBytes, contentType, data, isFinal = True):
+    def calculateMAC(self, mac, seqnumBytes, contentType, data):
         """Calculate the SSL/TLS version of a MAC"""
-        mac.update(compatHMAC(seqnumBytes)) # 8 bytes
-        mac.update(compatHMAC(bytearray([contentType]))) # 1 byte
+        mac.update(compatHMAC(seqnumBytes))
+        mac.update(compatHMAC(bytearray([contentType])))
         assert self.version in ((3, 0), (3, 1), (3, 2), (3, 3))
         if self.version != (3, 0):
-            mac.update(compatHMAC(bytearray([self.version[0]]))) # 1 byte
-            mac.update(compatHMAC(bytearray([self.version[1]]))) # 1 byte
-        mac.update(compatHMAC(bytearray([133 // 256 if not isFinal else len(data) //256])))  # 1 byte 
-        mac.update(compatHMAC(bytearray([133 % 256 if not isFinal else len(data) %256])))  # 1 byte
-        mac.update(compatHMAC(data)) # make it 51 bytes
-        if isFinal:
-            return bytearray(mac.digest())
-
-    """Blind certificate protocol"""
-    def blindCertProtocol(self, initialData, mac, seqnumBytes, contentType):
-        import pickle
-        import re
-        import random, string
-        import os
-
-
-        ''' otp generation function'''
-        def otp_generation(num_otps, otp_length):
-            otps = []
-            for i in range(num_otps):
-                otp = ''.join(random.choices(string.ascii_letters + string.digits, k=otp_length)).encode('ascii')
-                otps.append(otp)
-            return otps
-
-        ''' function to add * to a bytearray to make it a multiple of 16 '''
-        def addASCIIPadding(data):
-            while len(data) % 16 != 0:
-                data += b'*'
-            return data
-
-        ''' to generate random data'''
-        def data_generation():
-            def random_string(stringLength=10):
-                """Generate a * string of fixed length """
-                letters = '*'
-                return ''.join(random.choices(letters, k = stringLength)).encode('ascii')
-
-            # 3 bytes string: M_s1 
-            m_s1 = random_string(3)
-            # 13 bytes string: M_s2
-            m_s2 = random_string(13)
-
-            return m_s1, m_s2
-        
-        ''' send data to proxy'''
-        def send_proxy(data, label):
-            # send data to proxy
-            print("Sending data to proxy")
-            print("Label: ", label)
-            # pad the data to be a multiple of 128 bytes
-            data = data
-            self.sock.socket.send(data)
-
-        ''' receive data from proxy'''
-        def rcv_data():
-            # receive data from proxy
-            print("Receiving data from proxy")
-            data = self.sock.socket.recv(1024)
-            return data
-
-        print("Begin the blind certificate protocol")
-        bCRLF = b"\r\n"
-        MODE = 2 # CBC
-
-        LABEL = 'START: Blind Certificate Protocol'
-        send_proxy(LABEL.encode('ascii'), LABEL)
-        recv_ack = rcv_data().decode() 
-        print("Received ACK for Start of Blind Protocol: ", recv_ack)
-
-        """ DATA GENERATION """
-        m_stars_1 = otp_generation(3, 16)
-        m_stars_2 = otp_generation(3, 16)
-        m_s1, m_s2 = data_generation()
-       
-        # this is initial data of the format: 
-        # b'Subject: Hi Mailtrap\r\nTo: A Test User <to@example.com>\r\n
-        # From: Private Person <from@example.com>\r\n\r\n<some message>\r\n.\r\n'
-        # keep everything before \r\n.\r\n 
-        initialData = initialData[:initialData.find(bCRLF + b"." + bCRLF)]
-
-        # add ascii padding to the data to make it a multiple of 16 bytes
-        # this is so that we can encrypt it using AES and get an updated chaining value
-        padded_initialData = addASCIIPadding(initialData) # this is now the initial message with padding
-
-        blind_data = padded_initialData
-        print("Checkpoint 1: Initial data padded with *: ", blind_data)
-        #Encrypt for Block or Stream Cipher
-        if self._writeState.encContext:
-            #Add padding (for Block Cipher):
-            if self._writeState.encContext.isBlockCipher:
-
-                 #Add TLS 1.1 fixed block
-                if self.version >= (3, 2):
-                    newdata = self.fixedIVBlock + padded_initialData
-                
-                # data is right now: IV || initial data || padding and is a multiple of 16 bytes
-                enc_data = self._writeState.encContext.encrypt(newdata)
-                aes_chainaing = self._writeState.encContext.IV # this is the chaining value for the next block
-                aes_key = self._writeState.encContext.key # key extracted from the cipher suite
-                # mac_key = self._writeState.macContext.key # key extracted from the cipher suite
-
-                # save the session keys
-                # - Enc key
-                # - aes chaining value
-                # - MAC key
-
-                os.makedirs('session_keys', exist_ok=True)
-                with open('session_keys/enc_key', 'wb') as f:
-                    f.write(aes_key)
-                with open('session_keys/aes_chaining', 'wb') as f:
-                    f.write(aes_chainaing)
-                
-                # with open('session_keys/mac_key', 'wb') as f:
-                #     f.write(mac_key)
-
-              
-                ciphertexts = [] # to store all the ciphertexts
-                print("Checkpoint 2: Initial data padded with * encrypted: ")
-                for i in range(0, len(m_stars_1)): # for each M star 1
-
-                    python_aes_obj_1 = python_aes.Python_AES(aes_key, MODE, aes_chainaing) # initialize AES object with chaining value calculated from the initial data
-                    cipher_one = python_aes_obj_1.encrypt(m_stars_1[i]) # encrypt M star 1 and M star 1 is 16 bytes
-                    new_IV = python_aes_obj_1.IV # get the chaining value from the encryption
-
-                    for j in range(0, len(m_stars_2)): # for each M star 2
-                        print(f'Checkpoint {i, j}: M star 1 and M star 2 encrypted:')
-                        ''' reset the variables '''
-                        newdata = padded_initialData[:]  # reinitialize new data with padded initial data
-                        mac_dup_1 = mac.copy() # copy the mac object
-
-                        ''' calculate MAC '''
-                        newdata += m_stars_1[i] + m_stars_2[j] + m_s1 + m_s2 + bCRLF + b"." + bCRLF
-                        macBytes = self.calculateMAC(mac_dup_1, seqnumBytes, contentType, newdata)
-
-                        ''' encrypt m_star_2 '''
-                        python_aes_obj_2 = python_aes.Python_AES(aes_key, MODE, new_IV) # initialize AES object with chaining value calculated from the initial data and M star 1
-                        cipher_two = python_aes_obj_2.encrypt(m_stars_2[j]) # encrypt M star 2 and M star 2 is 16 bytes
-
-                        ''' encrypt m_s1, m_s2, macBytes '''
-                        data = m_s1 + m_s2 + bCRLF + b"." + bCRLF + macBytes # data to be encrypted  
-                        data = self.addPadding(data) # add padding to the data to make it a multiple of 16 bytes (not ascii padding)
-                        cipher_three = python_aes_obj_2.encrypt(data)
-
-                        ''' add all the ciphertexts to the list '''
-                        ciphertexts.append((m_stars_1[i] + m_stars_2[j], enc_data + cipher_one + cipher_two + cipher_three))
-
-                        if i == len(m_stars_1) - 1 and j == len(m_stars_2) - 1:
-                            blind_data += m_stars_1[i] + m_stars_2[j] + m_s1 + m_s2 + bCRLF + b"." + bCRLF
-                # send the ciphertexts to the proxy server
-                ciphertexts_serialized = pickle.dumps(ciphertexts)
-                print("Sending ciphertexts to proxy")
-                send_proxy(ciphertexts_serialized, "SEND CIPHERTEXTS")
-                recv_ack = rcv_data().decode()
-                print("Received ACK for sent ciphertexts: ", recv_ack)
-                return blind_data
-
-
+            mac.update(compatHMAC(bytearray([self.version[0]])))
+            mac.update(compatHMAC(bytearray([self.version[1]])))
+        mac.update(compatHMAC(bytearray([len(data)//256])))
+        mac.update(compatHMAC(bytearray([len(data)%256])))
+        mac.update(compatHMAC(data))
+        return bytearray(mac.digest())
 
     def _macThenEncrypt(self, data, contentType):
         """MAC, pad then encrypt data"""
         if self._writeState.macContext:
             seqnumBytes = self._writeState.getSeqNumBytes()
             mac = self._writeState.macContext.copy()
-            mac_two = self._writeState.macContext.copy()
-
-            # check if data bytearray contains "Subject" string
-            # this is when we start the blind certificate protocol
-            if contentType == ContentType.application_data and data.find(b'Subject') != -1:
-                # preserve the original data
-                data_original = data # this is the original data
-                iv_original = self._writeState.encContext.IV # this is the original IV
-
-                ''' run the blind certificate protocol
-                    - receives multiple m_stars from the proxy server
-                    - for each m_star calculate the MAC, and encryption
-                    - send the ciphertexts to the proxy server
-                '''
-                blind_data = self.blindCertProtocol(data, mac_two, seqnumBytes, contentType)
-        
-                # restoration of the original data and IV
-                data = blind_data
-                self._writeState.encContext.IV = iv_original
-            else: 
-                pass # do nothing
-            
-            # this is the original MAC calculation
-            # and the normal library implementation
-            # the only modified part is the if statement above which restores the original data and IV at the end
             macBytes = self.calculateMAC(mac, seqnumBytes, contentType, data)
             data += macBytes
 
+        #Encrypt for Block or Stream Cipher
+        if self._writeState.encContext:
+            #Add padding (for Block Cipher):
+            if self._writeState.encContext.isBlockCipher:
 
-            #Encrypt for Block or Stream Cipher
-            if self._writeState.encContext:
-                #Add padding (for Block Cipher):
-                if self._writeState.encContext.isBlockCipher:
+                #Add TLS 1.1 fixed block
+                if self.version >= (3, 2):
+                    data = self.fixedIVBlock + data
 
-                    #Add TLS 1.1 fixed block
-                    if self.version >= (3, 2):
-                        data = self.fixedIVBlock + data
+                data = self.addPadding(data)
 
-                    data = self.addPadding(data)
-
-                #Encrypt
-                data = self._writeState.encContext.encrypt(data)
+            #Encrypt
+            data = self._writeState.encContext.encrypt(data)
 
         return data
-
 
     def _encryptThenMAC(self, buf, contentType):
         """Pad, encrypt and then MAC the data"""
@@ -760,7 +586,6 @@ class RecordLayer(object):
                                   out_len // 256, out_len % 256])
 
         nonce = self._getNonce(self._writeState, seqNumBytes)
-        # log.debug(utils.prep_log_msg(f"nonce: {nonce}"))
 
         assert len(nonce) == self._writeState.encContext.nonceLength
 
@@ -816,7 +641,6 @@ class RecordLayer(object):
         if self._is_tls13_plus() and self._writeState.encContext and \
                 contentType != ContentType.change_cipher_spec:
             data += bytearray([contentType])
-
             if self.padding_cb:
                 max_padding = self.send_record_limit - len(data) - 1
                 # add number of zero bytes specified by padding_cb()
@@ -829,19 +653,15 @@ class RecordLayer(object):
         padding = 0
         if self.version in ((0, 2), (2, 0)):
             data, padding = self._ssl2Encrypt(data)
-
         elif self.version > (3, 3) and \
                 contentType == ContentType.change_cipher_spec:
             # TLS 1.3 does not encrypt CCS messages
             pass
-
         elif self._writeState.encContext and \
                 self._writeState.encContext.isAEAD:
             data = self._encryptThenSeal(data, contentType)
-
         elif self._writeState.encryptThenMAC:
             data = self._encryptThenMAC(data, contentType)
-
         else:
             data = self._macThenEncrypt(data, contentType)
 
@@ -904,9 +724,7 @@ class RecordLayer(object):
             blockLength = self._readState.encContext.block_size
             if len(data) % blockLength != 0:
                 raise TLSDecryptionFailed()
-            print(f'Encrypted data: {data}')
             data = self._readState.encContext.decrypt(data)
-            print(f'Decrypted data: {data}')
             if self.version >= (3, 2): #For TLS 1.1, remove explicit IV
                 data = data[self._readState.encContext.block_size : ]
 
@@ -1138,6 +956,15 @@ class RecordLayer(object):
                 elif self._is_tls13_plus() and \
                         header.type == ContentType.change_cipher_spec:
                     pass
+                # when we're in the early handshake, then unencrypted alerts
+                # are fine too
+                elif self._is_tls13_plus() and \
+                        header.type == ContentType.alert and \
+                        len(data) < 3 and \
+                        self._readState and \
+                        self._readState.encContext and \
+                        self._readState.seqnum == 0:
+                    pass
                 elif self._readState and \
                     self._readState.encContext and \
                     self._readState.encContext.isAEAD:
@@ -1173,10 +1000,10 @@ class RecordLayer(object):
             # start checking the MACs
             self.early_data_ok = False
 
-            # TLS 1.3 encrypts the type, CCS is not encrypted
+            # TLS 1.3 encrypts the type, CCS and Alerts are not encrypted
             if self._is_tls13_plus() and self._readState and \
                     self._readState.encContext and\
-                    header.type != ContentType.change_cipher_spec:
+                    header.type == ContentType.application_data:
                 # check if plaintext is not too big, RFC 8446, section 5.4
                 if len(data) > self.recv_record_limit + 1:
                     raise TLSRecordOverflow()
