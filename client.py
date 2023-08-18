@@ -78,11 +78,19 @@ if __name__ == '__main__':
         s.sendmail(sender['email'], receiver['email'], msg)
         s.quit()
 
+    # @profile
     def youchoose_email():
         try:
+            handshake = HandshakeSettings()
+            #aes cbc with hmac sha256
+            handshake.minVersion = (3,3)
+            handshake.maxVersion = (3,3)
+            handshake.cipherNames = ['aes128']
+            handshake.macNames = ['sha256']
+            handshake.useEncryptThenMAC = False
             client = MAILClient(verifier['ip'], verifier['port'], \
                                 sender['email'], sender['pwd'], \
-                                    is_registered=True)
+                                    is_registered=True, settings=handshake)
             # logging.debug(utils.prep_log_msg(f'Connected to {verifier["ip"]}:{verifier["port"]}'))
         
         except Exception as e:
@@ -97,7 +105,8 @@ if __name__ == '__main__':
             # logging.critical(utils.prep_log_msg(e.__str__()))
             exit(1)
 
-    youchoose_email()
+    for i in range(1):
+        youchoose_email()
     # standard_email()
 
     print(f'Client took {time.time() - timer} seconds to run')

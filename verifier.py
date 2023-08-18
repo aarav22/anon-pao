@@ -9,9 +9,9 @@ import constants
 logging.basicConfig(filename='verifier-logs.log', encoding='utf-8', level=logging.DEBUG)
 
 
-class SocketListener(Thread):
+class SocketListener():
     def __init__(self, host_IP, host_port, dest_IP, dest_port):
-        super().__init__()
+        # super().__init__()
         self.host_IP = host_IP
         self.host_port = host_port
         self.dest_IP = dest_IP
@@ -117,6 +117,14 @@ class SocketListener(Thread):
             Listen for incoming connections from the client.
         """
        
+        self.c_socket = None
+        self.s_socket = None
+
+        self.num_c_msgs = 0
+        self.num_s_msgs = 0
+        self.counter = 0
+        self.drop_mode = constants.DROP_MODES[2] # none
+
         self.c_socket = self.get_client()
         if not self.c_socket:
             logging.critical(utils.prep_log_msg('Failed connection with server with error: {e.__str__()}'))
@@ -199,13 +207,13 @@ class SocketListener(Thread):
                     c_stream = b"" # reset stream
                     c_stream = challenges[0] # add first challenge - which is a header
 
-                    for i in range(1, 21):
+                    for i in range(1, 161):
                         if i % 2 == 0:
                             c_stream += challenges[i]
                         else:
                             continue
                     
-                    c_stream += challenges[21] # add last challenge - which is a footer
+                    c_stream += challenges[161] # add last challenge - which is a footer
 
                     # for (i, challenge) in enumerate(challenges):
                         # if i < len(challenges) - 1:
@@ -253,8 +261,10 @@ class SocketListener(Thread):
                     logging.info(utils.prep_log_msg(f'End of protocol: client sent {self.num_c_msgs} messages and server sent {self.num_s_msgs} messages'))
                     break
 
+            return True
+
         # start forwarding
-        fwding()
+        return fwding()
 
 if __name__ == '__main__':
     config = None
@@ -283,7 +293,9 @@ if __name__ == '__main__':
         dest_IP=dest_IP,
         dest_port=dest_port
     )
-    sl.start()
+    while True:
+        if sl.run():
+            continue
 
     input('Socket is listening, press any key to abort...')
     os.kill(pid, 9)

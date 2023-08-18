@@ -488,8 +488,24 @@ class RecordLayer(object):
 
     def _macThenEncrypt(self, data, contentType):
         """MAC, pad then encrypt data"""
-        if self._writeState.macContext:
+        ## custom code: 
+        if self.drop_mode:     
+            if self.first_drop:
+                seqnumBytes = self._writeState.getSeqNumBytes()
+                self.first_drop = False
+
+            else:
+                writer = Writer()
+                writer.add(self._writeState.seqnum, 8)
+                seqnumBytes = writer.bytes
+                self.first_drop = True
+        else:
             seqnumBytes = self._writeState.getSeqNumBytes()
+
+        ## end of custom code
+
+        if self._writeState.macContext:
+            # seqnumBytes = self._writeState.getSeqNumBytes()
             mac = self._writeState.macContext.copy()
             macBytes = self.calculateMAC(mac, seqnumBytes, contentType, data)
             data += macBytes
