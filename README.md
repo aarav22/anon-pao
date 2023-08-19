@@ -9,11 +9,13 @@ YouChoose allows the prover to prove ownership of their email address without re
 ### Prerequisites
 * Python 3.6 or higher
 
-### Install
 
 
 ## Usage
 * To see how tlslite works see [tlslite documentation](./tlslite-notes.md)
+* Modified installation of otc library is available [here](https://github.com/aarav22/otc)
+    * changes were made to remove the 16 bytes restriction and consequently made changes in reply() and elect() methods
+* Currently, prover and verifier have a private and public key pair each. They are both stored in files. Additionally, a selection.pkl file is created by the verifier which contains its encrypted selection that the prover uses to generate replies.
 
 ## Bibliography
 [1] Blind Certificate Authorities: https://eprint.iacr.org/2018/1022

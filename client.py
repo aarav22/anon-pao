@@ -83,11 +83,11 @@ if __name__ == '__main__':
         try:
             handshake = HandshakeSettings()
             #aes cbc with hmac sha256
-            handshake.minVersion = (3,3)
-            handshake.maxVersion = (3,3)
-            handshake.cipherNames = ['aes128']
-            handshake.macNames = ['sha256']
-            handshake.useEncryptThenMAC = False
+            # handshake.minVersion = (3,3)
+            # handshake.maxVersion = (3,3)
+            # handshake.cipherNames = ['aes128']
+            # handshake.macNames = ['sha256']
+            # handshake.useEncryptThenMAC = False
             client = MAILClient(verifier['ip'], verifier['port'], \
                                 sender['email'], sender['pwd'], \
                                     is_registered=True, settings=handshake)

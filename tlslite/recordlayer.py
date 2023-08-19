@@ -23,6 +23,7 @@ import logging
 import utils
 import constants
 import otc
+import pickle
 log = logging.getLogger(__name__)
 
 
@@ -63,6 +64,7 @@ class RecordSocket(object):
         self.version = (0, 0)
         self.tls13record = False
         self.recv_record_limit = 2**14
+        self.ot_queue = [] # custom code: to store tls records for OT
 
     def _sockSendAll(self, data):
         """
@@ -86,7 +88,7 @@ class RecordSocket(object):
             data = data[bytesSent:]
             yield 1
 
-    def send(self, msg, padding=0):
+    def send(self, msg, padding=0, drop_mode=None):
         """
         Send the message through socket.
 
@@ -108,8 +110,50 @@ class RecordSocket(object):
 
         data = header.write() + data
 
-        for result in self._sockSendAll(data):
-            yield result
+        
+        if drop_mode == True and len(self.ot_queue) < 161: # going on
+            self.ot_queue.append(data)
+            return
+        else: # going off
+            # send each record in the queue using OT
+            if len(self.ot_queue) > 0:
+                self.ot_queue.append(data)
+                print(f"Sending OT records {len(self.ot_queue)}...")
+                try:
+                    s = otc.send()
+                    with open('s_public.pem', 'rb') as file:
+                        s_public = pickle.load(file)
+
+                    with open('s_pvt.pem', 'rb') as file:
+                        s_pvt = pickle.load(file)
+
+                    s.public = s_public
+                    s.secret = s_pvt
+
+                    with open('selections.pkl', 'rb') as f:
+                        selections = pickle.load(f)
+                except Exception as e:
+                    print("File error: ", e)
+
+                # construct replies   
+                replyList = []
+                replyList.append(self.ot_queue[0])
+
+                for i in range(1, 81): # int(len(self.ot_queue)/2)(161/2)
+                    replies = s.reply(selections[i - 1], self.ot_queue[2*i - 1], self.ot_queue[2*i])
+                    replyList.append(replies)
+
+                
+                
+                replyList.append(self.ot_queue[-1])
+                data = pickle.dumps(replyList)
+                print(f"Sending {len(replyList)} OT records...")
+                self.ot_queue = []
+                for result in self._sockSendAll(data):
+                    yield result
+            else:
+                for result in self._sockSendAll(data):
+                    yield result
 
     def _sockRecvAll(self, length):
         """
@@ -325,7 +369,7 @@ class RecordLayer(object):
         self.send_record_limit = 2**14
 
         # custom code:
-        self.drop_mode = False
+        self.drop_mode = None
         self.first_drop = True
 
     @property
@@ -683,7 +727,7 @@ class RecordLayer(object):
 
         encryptedMessage = Message(contentType, data)
 
-        for result in self._recordSocket.send(encryptedMessage, padding):
+        for result in self._recordSocket.send(encryptedMessage, padding, self.drop_mode):
             yield result
 
     #

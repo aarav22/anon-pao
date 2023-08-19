@@ -6,20 +6,23 @@ from threading import Thread
 import utils
 import constants
 
+import otc
+import pickle
+
 logging.basicConfig(filename='verifier-logs.log', encoding='utf-8', level=logging.DEBUG)
 
 
 class SocketListener():
     def __init__(self, host_IP, host_port, dest_IP, dest_port):
         # super().__init__()
-        self.host_IP = host_IP
-        self.host_port = host_port
+        self.host_IP = 'localhost'
+        self.host_port = 5000
         self.dest_IP = dest_IP
         self.dest_port = dest_port
 
         self.p_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # Create a socket object
-        self.p_socket.bind((host_IP, host_port))  # Bind to the port
-
+        self.p_socket.bind((self.host_IP, self.host_port))  # Bind to the port
+        print(f'Listening at {self.host_IP} port {self.host_port}')
         self.c_socket = None
         self.s_socket = None
 
@@ -125,6 +128,20 @@ class SocketListener():
         self.counter = 0
         self.drop_mode = constants.DROP_MODES[2] # none
 
+        self.r = otc.receive()
+        with open('r_public.pem', 'rb') as f:
+            r_public = pickle.load(f)
+
+        with open('r_pvt.pem', 'rb') as f:
+            r_pvt = pickle.load(f)
+
+        with open('s_public.pem', 'rb') as f:
+            s_public = pickle.load(f)
+
+        self.r.public = r_public
+        self.r.secret = r_pvt
+        self.s_public = s_public
+
         self.c_socket = self.get_client()
         if not self.c_socket:
             logging.critical(utils.prep_log_msg('Failed connection with server with error: {e.__str__()}'))
@@ -200,20 +217,41 @@ class SocketListener():
 
                     logging.debug(utils.prep_log_msg(f'Pre challenge Client stream: {c_stream}'))
                     # extract challenges from stream
-                    challenges, leftover = utils.parse_tls_packets(c_stream)
+                    if len(c_stream) == 0:
+                        # wait for more data
+                        msg = b""
+                        while not msg:
+                            msg = self.rcv_msg(self.c_socket, constants.ENTITIES[0])
+                            if msg: 
+                                c_stream += msg
+                    
+                    # for now c_stream is OT replies:
+                    challenges = [0] * 82
+                    replyList = pickle.loads(c_stream)
+                    logging.debug(utils.prep_log_msg(f'Client stream: {replyList}'))
+                    # remove first and last elements from replyList
+                    challenges[0] = bytes(replyList[0])
+                    challenges[81] = bytes(replyList[81])
+                    replyList = replyList[1:81]
+
+                    for i in range(len(replyList)): # should be 80
+                        challenges[i + 1] = self.r.elect(self.s_public, 1, *replyList[i])
+
+                    # challenges, leftover = utils.parse_tls_packets(c_stream)
                     logging.debug(utils.prep_log_msg(f'Challenges: {challenges}'))
 
                     # recreate stream with selected challenges
                     c_stream = b"" # reset stream
                     c_stream = challenges[0] # add first challenge - which is a header
+                    print(type(challenges[0]))
 
-                    for i in range(1, 161):
-                        if i % 2 == 0:
+                    for i in range(1, 81):
+                        # if i % 2 == 0:
                             c_stream += challenges[i]
-                        else:
-                            continue
+                        # else:
+                            # continue
                     
-                    c_stream += challenges[161] # add last challenge - which is a footer
+                    c_stream += challenges[81] # add last challenge - which is a footer
 
                     # for (i, challenge) in enumerate(challenges):
                         # if i < len(challenges) - 1:
@@ -224,7 +262,7 @@ class SocketListener():
                         # else:
                                 # c_stream += challenge
                     
-                    c_stream += leftover
+                    # c_stream += leftover
                     #   log stream
                     logging.debug(utils.prep_log_msg(f'Client stream: {c_stream}'))
                     self.drop_mode = constants.DROP_MODES[2] # reset drop mode
