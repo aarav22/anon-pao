@@ -12,13 +12,13 @@ logging.basicConfig(filename='verifier-logs.log', encoding='utf-8', level=loggin
 class SocketListener():
     def __init__(self, host_IP, host_port, dest_IP, dest_port):
         # super().__init__()
-        self.host_IP = host_IP
-        self.host_port = host_port
+        self.host_IP = socket.gethostname()
+        self.host_port = 5000
         self.dest_IP = dest_IP
         self.dest_port = dest_port
 
         self.p_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # Create a socket object
-        self.p_socket.bind((host_IP, host_port))  # Bind to the port
+        self.p_socket.bind((self.host_IP, self.host_port))  # Bind to the port
 
         self.c_socket = None
         self.s_socket = None
@@ -175,11 +175,9 @@ class SocketListener():
                 # enter drop begin mode
                 elif self.drop_mode == constants.DROP_MODES[0]: 
                     msg = msg.replace(constants.bDROP_MSG_BEGIN, b'')
-                    someFlag = True
 
                     # client is sending challenges
-                    while msg or someFlag:
-                        someFlag = False
+                    while msg:
                         self.drop_mode = get_drop_mode(msg)
                         c_stream += msg                            
 
@@ -187,46 +185,30 @@ class SocketListener():
                             break
 
                         msg = self.rcv_msg(self.c_socket, constants.ENTITIES[0])
-                        print(msg)
 
                     if self.drop_mode != constants.DROP_MODES[1]:
                         logging.critical(utils.prep_log_msg('Drop end mode not found'))
-                        # exit(1)
+                        exit(1)
                 
                 # enter drop end mode
                 if self.drop_mode == constants.DROP_MODES[1]:
                     # remove drop end identifier from stream  
                     c_stream = c_stream.replace(constants.bDROP_MSG_END, b'')
 
-                    logging.debug(utils.prep_log_msg(f'Pre challenge Client stream: {c_stream}'))
                     # extract challenges from stream
                     challenges, leftover = utils.parse_tls_packets(c_stream)
                     logging.debug(utils.prep_log_msg(f'Challenges: {challenges}'))
 
                     # recreate stream with selected challenges
-                    c_stream = b"" # reset stream
-                    c_stream = challenges[0] # add first challenge - which is a header
-
-                    for i in range(1, 161):
-                        if i % 2 == 0:
-                            c_stream += challenges[i]
-                        else:
+                    c_stream = challenges[0]
+                    for i in range(1, len(challenges) - 1):
+                        if i % 2 != 0: # skip every other challenge
                             continue
+                        else:
+                            c_stream += challenges[i]
                     
-                    c_stream += challenges[161] # add last challenge - which is a footer
-
-                    # for (i, challenge) in enumerate(challenges):
-                        # if i < len(challenges) - 1:
-                        #     if i % 2 != 0: # skip every other challenge
-                        #         continue
-                        #     else:
-                        #         c_stream += challenge
-                        # else:
-                                # c_stream += challenge
-                    
+                    c_stream += challenges[161]
                     c_stream += leftover
-                    #   log stream
-                    logging.debug(utils.prep_log_msg(f'Client stream: {c_stream}'))
                     self.drop_mode = constants.DROP_MODES[2] # reset drop mode
                     
                 # send stream to server
@@ -234,6 +216,7 @@ class SocketListener():
                 logging.debug(utils.prep_log_msg('Client done sending'))
 
                 return True
+
 
             def server():
                 s_stream = b""

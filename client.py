@@ -67,6 +67,7 @@ if __name__ == '__main__':
     # print(msg)
     
     # send mail
+    # @profile
     def standard_email():
         print("Sending email...")
         import smtplib
@@ -107,7 +108,7 @@ if __name__ == '__main__':
 
     for i in range(1):
         youchoose_email()
-    # standard_email()
+        # standard_email()
 
     print(f'Client took {time.time() - timer} seconds to run')
 
