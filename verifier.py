@@ -12,8 +12,8 @@ logging.basicConfig(filename='verifier-logs.log', encoding='utf-8', level=loggin
 class SocketListener():
     def __init__(self, host_IP, host_port, dest_IP, dest_port):
         # super().__init__()
-        self.host_IP = socket.gethostname()
-        self.host_port = 5000
+        self.host_IP = host_IP #socket.gethostname()
+        self.host_port = host_port
         self.dest_IP = dest_IP
         self.dest_port = dest_port
 
@@ -38,7 +38,7 @@ class SocketListener():
         """
 
         try:
-            msg = socket.recv(constants.TLS_RECORD_SIZE_LIMIT)
+            msg = socket.recv(constants.TLS_RECORD_SIZE_LIMIT * 4)
             logging.debug(utils.prep_log_msg(msg, prefix=f'{entity}: '))
 
             if entity == constants.ENTITIES[0]:
@@ -207,7 +207,7 @@ class SocketListener():
                         else:
                             c_stream += challenges[i]
                     
-                    c_stream += challenges[161]
+                    c_stream += challenges[len(challenges) - 1]
                     c_stream += leftover
                     self.drop_mode = constants.DROP_MODES[2] # reset drop mode
                     

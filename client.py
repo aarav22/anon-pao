@@ -18,7 +18,6 @@ class MAILClient(Client):
         self.starttls(settings=settings)
         self.ehlo()
 
-        # self.debuglevel = 1
         self.authenticated = False
         self.user = self.sign_user(email, password, is_registered)
         self.inbox = ''
@@ -63,11 +62,8 @@ if __name__ == '__main__':
     else:
         logging.critical(utils.prep_log_msg('Invalid message type'))
         exit(1)
-
-    # print(msg)
     
     # send mail
-    # @profile
     def standard_email():
         print("Sending email...")
         import smtplib
@@ -79,10 +75,10 @@ if __name__ == '__main__':
         s.sendmail(sender['email'], receiver['email'], msg)
         s.quit()
 
-    # @profile
     def youchoose_email():
         try:
             handshake = HandshakeSettings()
+
             #aes cbc with hmac sha256
             handshake.minVersion = (3,3)
             handshake.maxVersion = (3,3)
@@ -92,26 +88,18 @@ if __name__ == '__main__':
             client = MAILClient(verifier['ip'], verifier['port'], \
                                 sender['email'], sender['pwd'], \
                                     is_registered=True, settings=handshake)
-            # logging.debug(utils.prep_log_msg(f'Connected to {verifier["ip"]}:{verifier["port"]}'))
         
         except Exception as e:
-            # logging.critical(utils.prep_log_msg(e.__str__())) # most likely missing inputs
             exit(1)
 
         try:
             client.sendmail(sender['email'], receiver['email'], msg)
-            # logging.info(utils.prep_log_msg('Message sent successfully!'))
 
         except Exception as e:
-            # logging.critical(utils.prep_log_msg(e.__str__()))
             exit(1)
 
-    for i in range(1):
         youchoose_email()
         # standard_email()
-
-    print(f'Client took {time.time() - timer} seconds to run')
-
 
 
     

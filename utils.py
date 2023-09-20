@@ -91,7 +91,6 @@ From: {sender}
             for i in range(1, num_msgs+1): 
                 new_msg = f"""{i%2}"""
                 msg_body += new_msg + ' ' * calc_padding_len(new_msg)
-                # print(f'Post {i} len(msg_body): {len(msg_body)}')
     print(f'Post len(msg_body): {len(msg_body)}')
     return msg_body
 
