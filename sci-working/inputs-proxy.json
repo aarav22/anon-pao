@@ -1,0 +1,12 @@
+{
+    "verifier": {
+        "ip": "localhost",
+        "port": 5000
+    },
+    "prover": {
+        "email_server": {
+            "host": "sandbox.smtp.mailtrap.io",
+            "port": 587
+        }
+    }
+}

@@ -1,0 +1,20 @@
+{
+    "email-body":{
+        "subject": "Login Verification Code",
+        "msg": "Your login verification code is: ",
+        "type": "secret",
+        "num-msgs": 160
+    },
+    "sender": {
+        "email": "blindprotocol@outlook.com",
+        "host": "smtp-mail.outlook.com",
+        "pwd": "RoadRunner@22"
+    },
+    "receiver": {
+        "email": "aarav.secondary@gmail.com"
+    },
+    "verifier": {
+        "ip": "172.105.42.154",
+        "port": 5000
+    }
+}
