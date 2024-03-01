@@ -6,12 +6,12 @@
         "num-msgs": 160
     },
     "sender": {
-        "email": "blindprotocol@outlook.com",
+        "email": "",
         "host": "smtp-mail.outlook.com",
-        "pwd": "RoadRunner@22"
+        "pwd": ""
     },
     "receiver": {
-        "email": "aarav.secondary@gmail.com"
+        "email": ""
     },
     "verifier": {
         "ip": "172.105.42.154",
