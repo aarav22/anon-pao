@@ -1,0 +1,13 @@
+barriers==1.2.0
+bcl==2.3.1
+bn254==0.1.2
+cffi==1.17.1
+cryptography==45.0.7
+ecdsa==0.19.1
+fe25519==1.5.0
+ge25519==1.5.1
+oblivious==6.0.0
+parts==1.7.0
+pycparser==2.22
+rbcl==0.4.2
+six==1.17.0
